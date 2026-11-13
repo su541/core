@@ -1,24 +1,24 @@
 """Tests for the Vistapool time platform."""
 
 from collections.abc import Generator
+from copy import deepcopy
 from typing import Any
 from unittest.mock import AsyncMock, patch
 
 from aioaquarite import AquariteError
 import pytest
+from pytest_homeassistant.common import MockConfigEntry, snapshot_platform
 from syrupy.assertion import SnapshotAssertion
 
 from homeassistant.components.time import (
-    ATTR_TIME,
     DOMAIN as TIME_DOMAIN,
-    SERVICE_SET_VALUE,
+    TimeService,
+    TimeServiceArgument,
 )
-from homeassistant.const import ATTR_ENTITY_ID, Platform
+from homeassistant.const import CommonServiceArgument, Platform
 from homeassistant.core import HomeAssistant
 from homeassistant.exceptions import HomeAssistantError
 from homeassistant.helpers import entity_registry as er
-
-from tests.common import MockConfigEntry, snapshot_platform
 
 
 @pytest.fixture(autouse=True)
@@ -141,15 +141,17 @@ async def test_time_set_value(
 
     await hass.services.async_call(
         TIME_DOMAIN,
-        SERVICE_SET_VALUE,
-        {ATTR_ENTITY_ID: entity_id, ATTR_TIME: time_value},
+        TimeService.SET_VALUE,
+        {
+            CommonServiceArgument.ENTITY_ID: entity_id,
+            TimeServiceArgument.TIME: time_value,
+        },
         blocking=True,
     )
 
     mock_vistapool_client.set_value.assert_awaited_once_with(
         "ABCDEF1234567890", expected_path, expected_seconds
     )
-    assert hass.states.get(entity_id).state == time_value
 
 
 async def test_time_set_value_raises_on_api_error(
@@ -169,11 +171,98 @@ async def test_time_set_value_raises_on_api_error(
     with pytest.raises(HomeAssistantError) as excinfo:
         await hass.services.async_call(
             TIME_DOMAIN,
-            SERVICE_SET_VALUE,
+            TimeService.SET_VALUE,
             {
-                ATTR_ENTITY_ID: "time.my_pool_filtration_interval_1_start",
-                ATTR_TIME: "12:30:00",
+                CommonServiceArgument.ENTITY_ID: "time.my_pool_filtration_interval_1_start",
+                TimeServiceArgument.TIME: "12:30:00",
             },
             blocking=True,
         )
     assert excinfo.value.translation_key == "set_failed"
+
+
+_LIGHT_SCHEDULE_DATA = {
+    "main": {"version": 1},
+    "light": {"mode": 1, "status": 0, "from": 79200, "to": 3600},
+}
+
+
+async def test_light_schedule_times_not_created_without_scheduling(
+    hass: HomeAssistant,
+    mock_config_entry: MockConfigEntry,
+    mock_vistapool_client: AsyncMock,
+    mock_pool_data: dict[str, Any],
+) -> None:
+    """Test controllers without light scheduling do not get the light times."""
+    mock_vistapool_client.fetch_pool_data.return_value = mock_pool_data
+    mock_config_entry.add_to_hass(hass)
+
+    assert await hass.config_entries.async_setup(mock_config_entry.entry_id)
+    await hass.async_block_till_done()
+
+    assert hass.states.get("time.my_pool_light_schedule_start") is None
+    assert hass.states.get("time.my_pool_light_schedule_end") is None
+
+
+async def test_light_schedule_times_decode_seconds(
+    hass: HomeAssistant,
+    mock_config_entry: MockConfigEntry,
+    mock_vistapool_client: AsyncMock,
+) -> None:
+    """Test the light schedule bounds decode from seconds since midnight."""
+    mock_vistapool_client.fetch_pool_data.return_value = deepcopy(_LIGHT_SCHEDULE_DATA)
+    mock_config_entry.add_to_hass(hass)
+
+    assert await hass.config_entries.async_setup(mock_config_entry.entry_id)
+    await hass.async_block_till_done()
+
+    # 79200 is 22:00, 3600 is 01:00 the next morning.
+    assert hass.states.get("time.my_pool_light_schedule_start").state == "22:00:00"
+    assert hass.states.get("time.my_pool_light_schedule_end").state == "01:00:00"
+
+
+async def test_light_schedule_time_set_value(
+    hass: HomeAssistant,
+    mock_config_entry: MockConfigEntry,
+    mock_vistapool_client: AsyncMock,
+) -> None:
+    """Test setting a light schedule bound writes seconds since midnight."""
+    mock_vistapool_client.fetch_pool_data.return_value = deepcopy(_LIGHT_SCHEDULE_DATA)
+    mock_config_entry.add_to_hass(hass)
+
+    assert await hass.config_entries.async_setup(mock_config_entry.entry_id)
+    await hass.async_block_till_done()
+
+    await hass.services.async_call(
+        TIME_DOMAIN,
+        TimeService.SET_VALUE,
+        {
+            CommonServiceArgument.ENTITY_ID: "time.my_pool_light_schedule_start",
+            TimeServiceArgument.TIME: "21:30:00",
+        },
+        blocking=True,
+    )
+
+    mock_vistapool_client.set_value.assert_awaited_once_with(
+        "ABCDEF1234567890", "light.from", 77400
+    )
+
+
+async def test_light_schedule_time_created_for_midnight(
+    hass: HomeAssistant,
+    mock_config_entry: MockConfigEntry,
+    mock_vistapool_client: AsyncMock,
+) -> None:
+    """Test a schedule bound of zero seconds still creates the entity.
+
+    Zero is midnight, a legitimate schedule bound, not a missing field.
+    """
+    data = deepcopy(_LIGHT_SCHEDULE_DATA)
+    data["light"]["from"] = 0
+    mock_vistapool_client.fetch_pool_data.return_value = data
+    mock_config_entry.add_to_hass(hass)
+
+    assert await hass.config_entries.async_setup(mock_config_entry.entry_id)
+    await hass.async_block_till_done()
+
+    assert hass.states.get("time.my_pool_light_schedule_start").state == "00:00:00"

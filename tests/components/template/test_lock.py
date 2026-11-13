@@ -3,6 +3,8 @@
 from typing import Any
 
 import pytest
+from pytest_homeassistant.common import MockConfigEntry
+from pytest_homeassistant.typing import WebSocketGenerator
 from syrupy.assertion import SnapshotAssertion
 
 from homeassistant import setup
@@ -29,6 +31,7 @@ from homeassistant.helpers.typing import ConfigType
 from .conftest import (
     ConfigurationStyle,
     TemplatePlatformSetup,
+    assert_attributes_template,
     assert_extra_template_attributes,
     assert_invalid_config_entry_actions_do_not_create_entities,
     assert_invalid_yaml_actions_do_not_create_entities,
@@ -43,9 +46,6 @@ from .conftest import (
     setup_mock_template_entity_restore_state,
     setup_restore_template_entity,
 )
-
-from tests.common import MockConfigEntry
-from tests.typing import WebSocketGenerator
 
 TEST_STATE_ENTITY_ID = "sensor.test_state"
 TEST_AVAILABILITY_ENTITY_ID = "availability_state.state"
@@ -1253,3 +1253,58 @@ async def test_blocked_template_attributes(
     assert (
         f"Unsupported attribute(s) found for {DEFAULT_NAME}: {attribute}" in caplog.text
     )
+
+
+@pytest.mark.parametrize(
+    "style", [ConfigurationStyle.MODERN, ConfigurationStyle.TRIGGER]
+)
+async def test_attributes_template(
+    hass: HomeAssistant,
+    style: ConfigurationStyle,
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    """Test attributes as a single template."""
+    await assert_attributes_template(
+        hass,
+        TEST_LOCK,
+        style,
+        {
+            "state": "{{ 'locked' }}",
+            **LOCK_ACTION,
+            **UNLOCK_ACTION,
+        },
+        caplog,
+    )
+
+
+@pytest.mark.parametrize(
+    "attribute",
+    list(LockEntityStateAttribute),
+)
+@pytest.mark.parametrize(
+    "style", [ConfigurationStyle.MODERN, ConfigurationStyle.TRIGGER]
+)
+async def test_attributes_template_with_blocked_attributes(
+    hass: HomeAssistant,
+    style: ConfigurationStyle,
+    attribute: LockEntityStateAttribute,
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    """Test blocked attributes for a single attributes template."""
+    await setup_entity(
+        hass,
+        TEST_LOCK,
+        style,
+        1,
+        {
+            "state": "{{ 'locked' }}",
+            **LOCK_ACTION,
+            **UNLOCK_ACTION,
+            "attributes": f"{{{{ dict({attribute}='does not matter') }}}}",
+        },
+    )
+
+    await async_trigger(hass, "sensor.test_extra_attributes", "anything")
+
+    error = f"Unsupported attribute(s) found for {TEST_LOCK.entity_id}: {attribute}"
+    assert error in caplog.text

@@ -1,9 +1,16 @@
 """The tests for the Template vacuum platform."""
 
 from dataclasses import asdict
+from enum import StrEnum
+from itertools import chain
 from typing import Any
 
 import pytest
+from pytest_homeassistant.common import (
+    MockConfigEntry,
+    async_mock_restore_state_shutdown_restart,
+)
+from pytest_homeassistant.typing import WebSocketGenerator
 from syrupy.assertion import SnapshotAssertion
 
 from homeassistant.components import template, vacuum
@@ -12,7 +19,9 @@ from homeassistant.components.vacuum import (
     ATTR_FAN_SPEED,
     Segment,
     VacuumActivity,
+    VacuumEntityCapabilityAttribute,
     VacuumEntityFeature,
+    VacuumEntityStateAttribute,
 )
 from homeassistant.const import (
     CONF_UNIQUE_ID,
@@ -32,6 +41,7 @@ from .conftest import (
     ConfigurationStyle,
     TemplatePlatformSetup,
     assert_action,
+    assert_attributes_template,
     assert_invalid_config_entry_actions_do_not_create_entities,
     assert_invalid_yaml_actions_do_not_create_entities,
     assert_state_and_attributes,
@@ -46,9 +56,7 @@ from .conftest import (
     setup_restore_template_entity,
 )
 
-from tests.common import MockConfigEntry, async_mock_restore_state_shutdown_restart
 from tests.components.vacuum import common
-from tests.typing import WebSocketGenerator
 
 TEST_STATE_ENTITY_ID = "sensor.test_state"
 TEST_ATTRIBUTE_ENTITY_ID = "sensor.test_attribute"
@@ -1136,7 +1144,9 @@ async def test_invalid_segments(
 )
 @pytest.mark.usefixtures("setup_vacuum")
 async def test_raise_segments_changed_issue(
-    hass: HomeAssistant, entity_registry: er.EntityRegistry
+    hass: HomeAssistant,
+    entity_registry: er.EntityRegistry,
+    issue_registry: ir.IssueRegistry,
 ) -> None:
     """Test that issue is raised on segments change."""
     hass.states.async_set(TEST_ATTRIBUTE_ENTITY_ID, "Bedroom")
@@ -1155,7 +1165,6 @@ async def test_raise_segments_changed_issue(
     hass.states.async_set(TEST_ATTRIBUTE_ENTITY_ID, "Bathroom")
     await hass.async_block_till_done()
 
-    issue_registry = ir.async_get(hass)  # pylint: disable=home-assistant-tests-registry-fixtures
     assert len(issue_registry.issues) != 0
 
 
@@ -1540,3 +1549,54 @@ async def test_invalid_config_entry_actions_do_not_create_entities(
     await assert_invalid_config_entry_actions_do_not_create_entities(
         hass, TEST_VACUUM, config, action, caplog
     )
+
+
+@pytest.mark.parametrize(
+    "style", [ConfigurationStyle.MODERN, ConfigurationStyle.TRIGGER]
+)
+async def test_attributes_template(
+    hass: HomeAssistant,
+    style: ConfigurationStyle,
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    """Test attributes as a single template."""
+    await assert_attributes_template(
+        hass,
+        TEST_VACUUM,
+        style,
+        {
+            "start": [],
+        },
+        caplog,
+    )
+
+
+@pytest.mark.parametrize(
+    "attribute",
+    list(chain(VacuumEntityCapabilityAttribute, VacuumEntityStateAttribute)),
+)
+@pytest.mark.parametrize(
+    "style", [ConfigurationStyle.MODERN, ConfigurationStyle.TRIGGER]
+)
+async def test_attributes_template_with_blocked_attributes(
+    hass: HomeAssistant,
+    style: ConfigurationStyle,
+    attribute: StrEnum,
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    """Test blocked attributes for a single attributes template."""
+    await setup_entity(
+        hass,
+        TEST_VACUUM,
+        style,
+        1,
+        {
+            "start": [],
+            "attributes": f"{{{{ dict({attribute}='does not matter') }}}}",
+        },
+    )
+
+    await async_trigger(hass, "sensor.test_extra_attributes", "anything")
+
+    error = f"Unsupported attribute(s) found for {TEST_VACUUM.entity_id}: {attribute}"
+    assert error in caplog.text

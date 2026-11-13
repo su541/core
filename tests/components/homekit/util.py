@@ -3,12 +3,11 @@
 from unittest.mock import patch
 
 from freezegun.api import FrozenDateTimeFactory
+from pytest_homeassistant.common import MockConfigEntry, async_fire_time_changed
 
 from homeassistant.components.homekit.const import DOMAIN, TARGET_CHANGE_RELOAD_COOLDOWN
 from homeassistant.const import CONF_NAME, CONF_PORT
 from homeassistant.core import HomeAssistant
-
-from tests.common import MockConfigEntry, async_fire_time_changed
 
 PATH_HOMEKIT = "homeassistant.components.homekit"
 

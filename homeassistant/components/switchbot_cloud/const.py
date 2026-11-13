@@ -24,8 +24,6 @@ VACUUM_FAN_SPEED_MAX = "max"
 
 CLIMATE_PRESET_SCHEDULE = "schedule"
 
-AI_ART_FRAME_UPLOAD_IMAGE_SERVICE = "upload_art_frame_image"
-
 AFTER_COMMAND_REFRESH = 5
 COVER_ENTITY_AFTER_COMMAND_REFRESH = 10
 SMART_RADIATOR_THERMOSTAT_AFTER_COMMAND_REFRESH = 30
@@ -92,6 +90,9 @@ DEVICE_SUPPORT_MAP: Final[dict[str, SwitchbotCloudDeviceConfig]] = {
         True, entity_config=(Platform.BINARY_SENSOR, Platform.SENSOR, Platform.LOCK)
     ),
     "Smart Lock Ultra": SwitchbotCloudDeviceConfig(
+        True, entity_config=(Platform.SENSOR, Platform.BINARY_SENSOR, Platform.LOCK)
+    ),
+    "Smart Lock Ultra Max": SwitchbotCloudDeviceConfig(
         True, entity_config=(Platform.SENSOR, Platform.BINARY_SENSOR, Platform.LOCK)
     ),
     "Smart Lock Vision": SwitchbotCloudDeviceConfig(

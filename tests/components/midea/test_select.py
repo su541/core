@@ -14,24 +14,23 @@ from midealocal.devices.fd import DeviceAttributes as FDAttributes, MideaFDDevic
 from midealocal.devices.x40 import DeviceAttributes as X40Attributes, MideaX40Device
 from midealocal.exceptions import SocketException
 import pytest
+from pytest_homeassistant.common import MockConfigEntry, snapshot_platform
 from syrupy.assertion import SnapshotAssertion
 
 from homeassistant.components.select import (
-    ATTR_OPTION,
     ATTR_OPTIONS,
     DOMAIN as SELECT_DOMAIN,
-    SERVICE_SELECT_OPTION,
+    SelectService,
+    SelectServiceArgument,
 )
-from homeassistant.const import ATTR_ENTITY_ID, Platform
+from homeassistant.const import STATE_UNAVAILABLE, CommonServiceArgument, Platform
 from homeassistant.core import HomeAssistant
 from homeassistant.exceptions import HomeAssistantError
 from homeassistant.helpers import entity_registry as er
 
 from . import setup_integration
-from .conftest import DummyDevice, entity_entries
+from .conftest import DummyDevice, SetDeviceAttribute, entity_entries
 from .const import TEST_DEVICE_ID
-
-from tests.common import MockConfigEntry, snapshot_platform
 
 
 async def _assert_service_call(
@@ -45,8 +44,11 @@ async def _assert_service_call(
     device.calls.clear()
     await hass.services.async_call(
         SELECT_DOMAIN,
-        SERVICE_SELECT_OPTION,
-        {ATTR_ENTITY_ID: entity_id, ATTR_OPTION: option},
+        SelectService.SELECT_OPTION,
+        {
+            CommonServiceArgument.ENTITY_ID: entity_id,
+            SelectServiceArgument.OPTION: option,
+        },
         blocking=True,
     )
     assert device.calls == expected_calls
@@ -230,6 +232,45 @@ async def test_ac_angle_and_rate_selects(
     )
 
 
+@pytest.mark.parametrize(
+    "unique_id",
+    [
+        f"{TEST_DEVICE_ID}_wind_lr_angle",
+        f"{TEST_DEVICE_ID}_wind_ud_angle",
+        f"{TEST_DEVICE_ID}_rate_select",
+    ],
+)
+async def test_ac_selects_unavailable_when_power_off(
+    hass: HomeAssistant,
+    mock_config_entry: Callable[[DummyDevice], MockConfigEntry],
+    set_device_attribute: SetDeviceAttribute,
+    unique_id: str,
+) -> None:
+    """Test AC angle/rate selects are unavailable while the unit is powered off."""
+    device = _ac_device()
+    config_entry = mock_config_entry(device)
+    with patch("homeassistant.components.midea._PLATFORMS", [Platform.SELECT]):
+        await setup_integration(hass, config_entry, device)
+
+    entity_id = entity_entries(hass, config_entry)[unique_id].entity_id
+    assert (state := hass.states.get(entity_id)) is not None
+    assert state.state != STATE_UNAVAILABLE
+
+    await set_device_attribute(device, ACAttributes.power, False)
+    assert (state := hass.states.get(entity_id)) is not None
+    assert state.state == STATE_UNAVAILABLE
+
+    await set_device_attribute(device, ACAttributes.power, True)
+    assert (state := hass.states.get(entity_id)) is not None
+    assert state.state != STATE_UNAVAILABLE
+
+    device.available = False
+    device.notify_update({"available": False})
+    await hass.async_block_till_done()
+    assert (state := hass.states.get(entity_id)) is not None
+    assert state.state == STATE_UNAVAILABLE
+
+
 async def test_fa_selects_do_not_overlap_fan_platform(
     hass: HomeAssistant,
     mock_config_entry: Callable[[DummyDevice], MockConfigEntry],
@@ -353,7 +394,10 @@ async def test_select_option_raises_on_device_communication_error(
     ):
         await hass.services.async_call(
             SELECT_DOMAIN,
-            SERVICE_SELECT_OPTION,
-            {ATTR_ENTITY_ID: entity_entry.entity_id, ATTR_OPTION: "60"},
+            SelectService.SELECT_OPTION,
+            {
+                CommonServiceArgument.ENTITY_ID: entity_entry.entity_id,
+                SelectServiceArgument.OPTION: "60",
+            },
             blocking=True,
         )

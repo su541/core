@@ -9,6 +9,12 @@ from aiohttp import ClientError
 from freezegun.api import FrozenDateTimeFactory
 from monzopy import AuthorisationExpiredError, InvalidMonzoAPIResponseError, Webhook
 import pytest
+from pytest_homeassistant.common import (
+    MockConfigEntry,
+    async_fire_time_changed,
+    async_mock_cloud_connection_status,
+)
+from pytest_homeassistant.typing import ClientSessionGenerator
 
 from homeassistant.components import cloud
 from homeassistant.components.event import DOMAIN as EVENT_DOMAIN
@@ -34,13 +40,6 @@ from homeassistant.helpers.network import NoURLAvailableError
 
 from . import setup_integration
 from .conftest import TEST_ACCOUNTS, WEBHOOK_ID, WEBHOOK_URL
-
-from tests.common import (
-    MockConfigEntry,
-    async_fire_time_changed,
-    async_mock_cloud_connection_status,
-)
-from tests.typing import ClientSessionGenerator
 
 CLOUDHOOK_URL = "https://hooks.nabu.casa/test-cloudhook"
 NEW_CLOUDHOOK_URL = "https://hooks.nabu.casa/new-cloudhook"
@@ -702,6 +701,9 @@ async def test_cloud_subscription_loss_falls_back_to_external_url(
         ),
     ):
         await setup_integration(hass, polling_config_entry)
+        assert polling_config_entry.runtime_data.webhook_manager.diagnostics_data[
+            "uses_cloudhook"
+        ]
         monzo.user_account.list_account_webhooks.side_effect = [
             [Webhook("old-current", "acc_curr", CLOUDHOOK_URL)],
             [Webhook("old-flex", "acc_flex", CLOUDHOOK_URL)],
@@ -715,6 +717,9 @@ async def test_cloud_subscription_loss_falls_back_to_external_url(
 
     assert polling_config_entry.data[CONF_CLOUDHOOK_URL] == CLOUDHOOK_URL
     assert polling_config_entry.data[CONF_WEBHOOK_URL] == WEBHOOK_URL
+    assert not polling_config_entry.runtime_data.webhook_manager.diagnostics_data[
+        "uses_cloudhook"
+    ]
     assert monzo.user_account.delete_webhook.await_args_list == [
         call("old-current"),
         call("old-flex"),

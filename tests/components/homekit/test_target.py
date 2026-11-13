@@ -36,7 +36,7 @@ from homeassistant.helpers.entityfilter import (
 
 from .util import async_fire_target_change_cooldown
 
-from tests.common import MockConfigEntry
+from pytest_homeassistant.common import MockConfigEntry
 
 
 @pytest.mark.parametrize(
