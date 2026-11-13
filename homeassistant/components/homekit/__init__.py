@@ -66,6 +66,7 @@ from homeassistant.helpers.entityfilter import (
     EntityFilter,
 )
 from homeassistant.helpers.start import async_at_started
+from homeassistant.helpers.target import TargetSelection
 from homeassistant.helpers.typing import ConfigType
 from homeassistant.loader import IntegrationNotFound, async_get_integration
 
@@ -126,22 +127,22 @@ from .const import (
     PERSIST_LOCK_DATA,
     SHUTDOWN_TIMEOUT,
     SIGNAL_RELOAD_ENTITIES,
-    TARGET_CHANGE_RELOAD_COOLDOWN as TARGET_CHANGE_RELOAD_COOLDOWN,
     STATUS_READY,
     STATUS_RUNNING,
     STATUS_STOPPED,
     STATUS_WAIT,
+    TARGET_CHANGE_RELOAD_COOLDOWN as TARGET_CHANGE_RELOAD_COOLDOWN,
     TYPE_AIR_PURIFIER,
 )
 from .iidmanager import AccessoryIIDStorage
 from .models import HomeKitConfigEntry, HomeKitEntryData
+from .services import async_setup_services
 from .target import (
     async_is_bridge_target_entity,
     async_target_entity_ids_by_type,
     async_track_target_entity_change,
     should_include_entity,
 )
-from .services import async_setup_services
 from .type_triggers import DeviceTriggerAccessory
 from .util import (
     accessory_friendly_name,
@@ -195,8 +196,12 @@ def _has_all_unique_names_and_ports(
 HOMEKIT_FILTER_SCHEMA = probatio.Schema(
     {
         **BASE_FILTER_SCHEMA.schema,
-        probatio.Optional(CONF_INCLUDE_TARGETS, default={}): probatio.Schema(cv.TARGET_ID_FIELDS),
-        probatio.Optional(CONF_EXCLUDE_TARGETS, default={}): probatio.Schema(cv.TARGET_ID_FIELDS),
+        probatio.Optional(CONF_INCLUDE_TARGETS, default={}): probatio.Schema(
+            cv.TARGET_ID_FIELDS
+        ),
+        probatio.Optional(CONF_EXCLUDE_TARGETS, default={}): probatio.Schema(
+            cv.TARGET_ID_FIELDS
+        ),
     }
 )
 

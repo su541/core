@@ -260,7 +260,9 @@ def _entity_review_schema(entity_ids: list[str]) -> probatio.Schema:
     """Return a read-only entity selector for reviewing selected entities."""
     return probatio.Schema(
         {
-            probatio.Optional(CONF_ENTITIES, default=entity_ids): selector.EntitySelector(
+            probatio.Optional(
+                CONF_ENTITIES, default=entity_ids
+            ): selector.EntitySelector(
                 selector.EntitySelectorConfig(
                     include_entities=entity_ids,
                     multiple=True,
@@ -933,9 +935,9 @@ class OptionsFlowHandler(OptionsFlow):
             last_step=False,
             data_schema=probatio.Schema(
                 {
-                    probatio.Required(CONF_HOMEKIT_MODE, default=homekit_mode): probatio.In(
-                        HOMEKIT_MODES
-                    ),
+                    probatio.Required(
+                        CONF_HOMEKIT_MODE, default=homekit_mode
+                    ): probatio.In(HOMEKIT_MODES),
                     probatio.Required(
                         CONF_DOMAINS,
                         default=domains,

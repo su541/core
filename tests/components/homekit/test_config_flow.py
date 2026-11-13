@@ -3,7 +3,6 @@
 from typing import Any
 from unittest.mock import AsyncMock, MagicMock, Mock, patch
 
-import probatio
 import pytest
 from pytest_homeassistant.common import MockConfigEntry
 

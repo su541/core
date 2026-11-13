@@ -848,6 +848,7 @@ async def test_homekit_expanded_target_specificity(
         "target_specificity",
         suggested_object_id="target_specificity",
         device_id=device.id,
+        original_name="Target specificity",
     )
     entity_registry.async_update_entity(registry_entry.entity_id, area_id=area.id)
     hass.states.async_set(registry_entry.entity_id, "on")

@@ -4,6 +4,7 @@ from unittest.mock import Mock, patch
 
 from freezegun.api import FrozenDateTimeFactory
 import pytest
+from pytest_homeassistant.common import MockConfigEntry
 
 from homeassistant.components.homekit.target import (
     async_is_bridge_target_entity,
@@ -35,8 +36,6 @@ from homeassistant.helpers.entityfilter import (
 )
 
 from .util import async_fire_target_change_cooldown
-
-from pytest_homeassistant.common import MockConfigEntry
 
 
 @pytest.mark.parametrize(
